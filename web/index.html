@@ -1,0 +1,32 @@
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/tabulator/4.9.3/css/tabulator.min.css" integrity="sha512-qXb7/N44R94029hvbV06tyEl1P3TCwCbyPsIUl61D6W8mRCFbCPsRYOVJbCUaEzlwUvg7JJSLsglThYs7zNoZw==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.1/papaparse.min.js" integrity="sha512-EbdJQSugx0nVWrtyK3JdQQ/03mS3Q1UiAhRtErbwl1YL/+e2hZdlIcSURxxh7WXHTzn83sjlh2rysACoJGfb6g==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tabulator/4.9.3/js/tabulator.min.js" integrity="sha512-N/WbW5rCM/O+/QpzuqYXkInRdSfFu6txbJcbQioBywGXDiF1XCJY2LXVKIGjNFUMS4P79mtf9pDu5ViXaa+BnA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+
+<body>
+    <div id="example-table"></div>
+</body>
+
+<script>
+    url = 'https://storage.cloud.google.com/uda-reporting-data-etl/public/execution_report.csv'
+    var data;
+
+       //initialize table
+    var table = new Tabulator("#example-table", {
+        ajaxURL: url,
+        autoColumns:true, //create columns from data field names
+    });
+
+    Papa.parse(url, {
+      header: true,
+      download: true,
+      dynamicTyping: true,
+      complete: function(results) {
+        console.log(results);
+        data = results.data;
+        table.setData(data);
+      }
+    });
+
+    //table.download("csv", "url", {delimiter:","}); //download a CSV file that uses a fullstop (.) delimiter
+
+</script>

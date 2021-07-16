@@ -1,37 +1,54 @@
 import mysql.connector as connection
 import pandas as pd
 from datetime import datetime
+import os
 
 from google.cloud import storage
 
-query = """
-SELECT
-		DATE(date) day,
-		a.*, s.name as source_name, b.*, c.*,  d.*,  e.*,  f.name AS str_status
-	FROM db_status.st_execution_log a
-		LEFT JOIN db_etl.etl_stage_execution b
-			ON a.id_execution=b.id_execution
-        LEFT JOIN configurations.co_source s
-            ON s.id_source = a.id_source
-		LEFT JOIN db_etl.etl_stage c
-			ON b.id_stage=c.id_stage
-		LEFT JOIN db_data_acquisition.da_loaded_acquisition d
-			ON d.id_load=b.id_load
-		LEFT JOIN db_data_acquisition.da_data_acquisition e
-			ON e.id_acquisition=d.id_acquisition
-		LEFT JOIN db_data_acquisition.da_status_acquisition f
-			ON f.id_status=e.id_status
-	ORDER BY day DESC
-"""
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
+from slack_sdk.webhook import WebhookClient
+url = "https://hooks.slack.com/services/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"
+#url = "https://hooks.slack.com/services/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"
+webhook = WebhookClient(url)
+
+PASSWD = os.getenv('UDA_PASSWD', 'm43{4L%E0sKK3w!fK') # change
+USER = os.getenv('UDA_USER', 'teamdata_18')
+HOST = os.getenv('UDA_HOST', "34.77.19.136")
+BUCKET = os.getenv('BUCKET', "uda-reporting-data-etl")
 
 conf = dict(
-    user = "teamdata_18",
-    passwd = "m43{4L%E0sKK3w!fK",
-    host = "34.77.19.136",
+    user = USER,
+    passwd = PASSWD,
+    host = HOST,
     port = 3306,
     db = 'db_status',
     use_pure = True,
 )
+
+query = """
+SELECT
+    DATE(date) day,
+    a.*,
+    s.name as source_name,
+    b.*, c.*,  d.*,  e.*,
+    f.name AS str_status
+    FROM db_status.st_execution_log a
+        LEFT JOIN db_etl.etl_stage_execution b
+            ON a.id_execution=b.id_execution
+        LEFT JOIN configurations.co_source s
+            ON s.id_source = a.id_source
+        LEFT JOIN db_etl.etl_stage c
+            ON b.id_stage=c.id_stage
+        LEFT JOIN db_data_acquisition.da_loaded_acquisition d
+            ON d.id_load=b.id_load
+        LEFT JOIN db_data_acquisition.da_data_acquisition e
+            ON e.id_acquisition=d.id_acquisition
+        LEFT JOIN db_data_acquisition.da_status_acquisition f
+            ON f.id_status=e.id_status
+    ORDER BY day DESC
+"""
 
 mydb = connection.connect(**conf)
 
@@ -62,16 +79,56 @@ def main(context):
     ret = df2.unstack(['source_name']).fillna(0).sort_values(['day', 'name_sort'], ascending=[False, True])
 
     new_cols = []
+    sort_cols = []
     for c in ret.columns:
         c_value = ret[c]
         last_exec = c_value[c_value>0].reset_index().day.max()
         diff = datetime.now()-last_exec
         _ = f'{c} [-{diff.days} days]'
         new_cols.append(_)
+        sort_cols.append((_, diff.days))
+
+    sort_cols.sort(key=lambda tup: tup[1], reverse=True)  # sorts in place
 
     ret.columns = new_cols
-    #ret.to_csv('report_execution.csv')
-    return ret
+    ret = ret[[c for c,d in sort_cols]]
+    public_url = export(ret, BUCKET)
+
+    msg = "Hi, don't worry about me! I'm a learning bot printing report ***bzzZZt*** messages.\n\n"
+    msg += "\nTake a look at what I've found about data-factory's latest executions: \n\n"
+
+    for c,d in sort_cols:
+        add = ':fire:'*int(d/7)
+        msg += f'    {c} {add} \n'
+
+    response = webhook.send(
+        text="execution report: ETAs",
+        blocks=[
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": msg
+                }
+            }
+        ]
+    )
+
+    assert response.status_code == 200
+    assert response.body == "ok"
+
+    return public_url
+
+def export(df, bucket):
+    client = storage.Client()
+    bucket = client.get_bucket(bucket)
+    object_ = 'public/execution_report.csv'
+    blob = bucket.blob(object_)
+    blob.cache_control = 'no-store'
+    blob.patch()
+    blob.upload_from_string(df.to_csv(), 'text/csv')
+    public_url = f'https://storage.cloud.google.com/{BUCKET}/{object_}'
+    return public_url
 
 if __name__=='__main__':
     ret = main(None)
