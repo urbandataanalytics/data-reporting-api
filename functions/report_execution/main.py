@@ -9,8 +9,7 @@ import ssl
 ssl._create_default_https_context = ssl._create_unverified_context
 
 from slack_sdk.webhook import WebhookClient
-url = "https://hooks.slack.com/services/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"
-#url = "https://hooks.slack.com/services/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"
+url = "https://hooks.slack.com/services/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"
 webhook = WebhookClient(url)
 
 PASSWD = os.getenv('UDA_PASSWD', 'm43{4L%E0sKK3w!fK') # change
